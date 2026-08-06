@@ -1,0 +1,288 @@
+/*
+ * Monochrome phosphor terminal.
+ *
+ * Everything about the look is driven by the custom properties below, so the
+ * CRT treatment can be dialled down (or off) for a given venue without
+ * touching the markup. Defaults are deliberately restrained: this has to be
+ * legible from the back of a room.
+ */
+
+:root {
+  /* Phosphor */
+  --phosphor: #3dff78;
+  --phosphor-dim: #1f9a45;
+  --glow-color: rgb(61 255 120 / 70%);
+  --glow-bloom: rgb(61 255 120 / 28%);
+  --background: #030503;
+
+  /* Type */
+  --font-stack: "DejaVu Sans Mono", "Liberation Mono", menlo, consolas,
+    "Andale Mono", "Courier New", courier, monospace;
+  --font-weight: 500;
+  --letter-spacing: 0.06em;
+  --line-height: 1.34;
+
+  /* CRT treatment */
+  --glow-blur: 0.08em;
+  --glow-bloom-blur: 0.35em;
+  --scanline-gap: 3px;
+  --scanline-thickness: 1px;
+  --scanline-opacity: 0.22;
+  --scanbar-opacity: 0.07;
+  --scanbar-duration: 9s;
+  --flicker-opacity: 0.028;
+  --flicker-duration: 6s;
+  --vignette-opacity: 0.55;
+  --screen-padding: 2.5vmin;
+  --dim-opacity: 0.68;
+}
+
+body[data-theme="amber"] {
+  --phosphor: #ffb03a;
+  --phosphor-dim: #a86a12;
+  --glow-color: rgb(255 176 58 / 65%);
+  --glow-bloom: rgb(255 176 58 / 26%);
+  --background: #060402;
+}
+
+body[data-theme="white"] {
+  --phosphor: #dfe8ff;
+  --phosphor-dim: #7c88a8;
+  --glow-color: rgb(223 232 255 / 60%);
+  --glow-bloom: rgb(223 232 255 / 22%);
+  --background: #04050a;
+}
+
+body[data-crt="off"] {
+  --scanline-opacity: 0;
+  --scanbar-opacity: 0;
+  --flicker-opacity: 0;
+  --vignette-opacity: 0;
+  --glow-blur: 0;
+  --glow-bloom-blur: 0;
+  --glow-color: transparent;
+  --glow-bloom: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  overflow: hidden;
+  height: 100%;
+  margin: 0;
+  background: var(--background);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-stack);
+  color: var(--phosphor);
+}
+
+#bezel {
+  position: relative;
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#screen {
+  position: absolute;
+  inset: 0;
+
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: var(--screen-padding);
+}
+
+#board {
+  font-family: var(--font-stack);
+  font-size: 16px; /* replaced at runtime to fill the viewport */
+  font-weight: var(--font-weight);
+  font-variant-ligatures: none;
+  line-height: var(--line-height);
+  text-shadow:
+    0 0 var(--glow-blur) var(--glow-color),
+    0 0 var(--glow-bloom-blur) var(--glow-bloom);
+  letter-spacing: var(--letter-spacing);
+  white-space: pre;
+}
+
+.line {
+  min-height: 1em;
+  white-space: pre;
+}
+
+.line.rule,
+.line.labels,
+.line.footer {
+  opacity: var(--dim-opacity);
+}
+
+.line.title {
+  font-weight: 700;
+}
+
+.line.message {
+  opacity: 0.92;
+}
+
+/* ---------- CRT overlays ---------- */
+
+.overlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+}
+
+.overlay.scanlines {
+  opacity: var(--scanline-opacity);
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      rgb(0 0 0 / 0%) 0,
+      rgb(0 0 0 / 0%) var(--scanline-gap),
+      rgb(0 0 0 / 100%) var(--scanline-gap),
+      rgb(0 0 0 / 100%) calc(var(--scanline-gap) + var(--scanline-thickness))
+    ),
+    linear-gradient(
+      to bottom,
+      rgb(255 255 255 / 0%) 0%,
+      rgb(255 255 255 / 4%) 50%,
+      rgb(255 255 255 / 0%) 100%
+    );
+  background-size:
+    auto,
+    100% 8px;
+}
+
+.overlay.scanbar {
+  opacity: var(--scanbar-opacity);
+  background: linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0%) 0%,
+    var(--glow-bloom) 45%,
+    rgb(255 255 255 / 18%) 50%,
+    var(--glow-bloom) 55%,
+    rgb(255 255 255 / 0%) 100%
+  );
+  background-size: 100% 18%;
+  background-repeat: no-repeat;
+  animation: crt-scanbar var(--scanbar-duration) linear infinite;
+}
+
+@keyframes crt-scanbar {
+  0% {
+    background-position: 0 -20%;
+  }
+
+  100% {
+    background-position: 0 120%;
+  }
+}
+
+.overlay.vignette {
+  opacity: var(--vignette-opacity);
+  background: radial-gradient(
+    ellipse at center,
+    rgb(0 0 0 / 0%) 45%,
+    rgb(0 0 0 / 90%) 130%
+  );
+}
+
+.overlay.flicker {
+  opacity: 0;
+  background: var(--phosphor);
+  animation: phosphor-flicker var(--flicker-duration) steps(1, end) infinite;
+}
+
+@keyframes phosphor-flicker {
+  0%,
+  7%,
+  9%,
+  38%,
+  41%,
+  73%,
+  100% {
+    opacity: 0;
+  }
+
+  8% {
+    opacity: var(--flicker-opacity);
+  }
+
+  39% {
+    opacity: calc(var(--flicker-opacity) * 0.6);
+  }
+
+  74% {
+    opacity: var(--flicker-opacity);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay.flicker,
+  .overlay.scanbar {
+    animation: none;
+  }
+}
+
+/* ---------- Operator bar (hidden in presentation mode) ---------- */
+
+#devbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 1.4em;
+  align-items: center;
+
+  padding: 0.6em 1.2em;
+  border-top: 1px solid rgb(127 127 127 / 25%);
+
+  font-family: var(--font-stack);
+  font-size: 12px;
+  color: var(--phosphor-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+
+  background: #000;
+}
+
+#devbar button {
+  cursor: pointer;
+
+  padding: 0;
+  border: 0;
+
+  font: inherit;
+  color: var(--phosphor-dim);
+  text-transform: inherit;
+  letter-spacing: inherit;
+
+  background: none;
+}
+
+#devbar button:hover,
+#devbar button.active {
+  color: var(--phosphor);
+}
+
+#devbar .hint {
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+body[data-presentation="true"] #devbar {
+  display: none;
+}
+
+body[data-presentation="true"] {
+  cursor: none;
+}
