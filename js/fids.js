@@ -56,7 +56,35 @@
     }, 0);
   }
 
-  function orderFlights(flights, order) {
+  // Stable shuffle: the same seed and flight IDs always produce the same
+  // pagination, regardless of the input dataset's original grouping.
+  function shuffleFlights(flights, seed) {
+    var result = flights.slice().sort(function (a, b) {
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    for (var i = result.length - 1; i > 0; i--) {
+      var j = Animations.hash(String(seed) + ":row:" + i) % (i + 1);
+      var item = result[i];
+      result[i] = result[j];
+      result[j] = item;
+    }
+    return result;
+  }
+
+  function orderFlights(flights, order, simulation) {
+    if (order && order.mode === "shuffle") {
+      return shuffleFlights(flights, order.seed || "gander-rows");
+    }
+    if (order && order.mode === "simulation") {
+      var schedule = simulation || {};
+      return flights.slice().sort(function (a, b) {
+        var left = schedule[a.id] && schedule[a.id].order;
+        var right = schedule[b.id] && schedule[b.id].order;
+        if (left == null) return right == null ? 0 : 1;
+        if (right == null) return -1;
+        return left - right;
+      });
+    }
     if (!order || order.mode === "dataset" || !order.by) return flights.slice();
     var keys = Array.isArray(order.by) ? order.by : [order.by];
     var direction = order.direction === "desc" ? -1 : 1;
@@ -99,7 +127,7 @@
 
   /** Data -> display rows. Pure; useful on its own for checking a dataset. */
   function buildRows(flights, state) {
-    return orderFlights(flights, state.order).map(function (flight) {
+    return orderFlights(flights, state.order, global.FIDS_DATA && global.FIDS_DATA.arrivalSimulation).map(function (flight) {
       return {
         id: flight.id,
         flight: flight,
@@ -131,15 +159,28 @@
     return el;
   }
 
-  function cellTextForTick(row, cell, cellIndex, state, tick, generative) {
+  function shiftEta(eta, minutes) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(eta || "")) return null;
+    var parts = eta.split(":");
+    var total = Number(parts[0]) * 60 + Number(parts[1]) + minutes;
+    total = ((total % 1440) + 1440) % 1440;
+    return ("0" + Math.floor(total / 60)).slice(-2) + ":" +
+      ("0" + total % 60).slice(-2);
+  }
+
+  function cellTextForTick(row, cell, cellIndex, state, tick, generative, refreshAge, forcedStatus) {
     if (!generative) return cell.text;
 
     var staging = state.staging;
     var tickMs = state.tickMs || 250;
     var segment = Staging.segmentAt(row.id, tick, tickMs, staging);
     var timing = Staging.refreshTiming(staging, tickMs, state.columns.length);
+    var status = forcedStatus || segment;
 
-    if (!Staging.columnVisible(segment.age, cellIndex, timing)) return "";
+    // A newly swapped-in flight gets the full blank-and-reveal treatment,
+    // even if its own seeded refresh timeline is part-way through a hold.
+    var age = refreshAge == null ? segment.age : refreshAge;
+    if (!Staging.columnVisible(age, cellIndex, timing)) return "";
 
     var column = state.columns[cellIndex];
     var text = cell.text;
@@ -152,15 +193,22 @@
           : null;
       if (landing != null) {
         text = landing;
-      } else if (segment.statusValue != null) {
-        text = transform(String(segment.statusValue), state.transform);
+      } else if (status.useEta) {
+        var schedule = global.FIDS_DATA && global.FIDS_DATA.arrivalSimulation;
+        var simulated = schedule && schedule[row.id];
+        text = simulated
+          ? (shiftEta(simulated.eta, status.etaOffsetMinutes) ||
+            placeholderFor(column, state))
+          : placeholderFor(column, state);
+      } else if (status.statusValue != null) {
+        text = transform(String(status.statusValue), state.transform);
       } else {
         text = placeholderFor(column, state);
       }
-      shouldBlink = segment.timeBlink && landing == null;
-    } else if (column.key === "gate") {
-      text = placeholderFor(column, state);
-      shouldBlink = segment.gateBlink;
+      // DELAYED always flashes, even if a future status configuration
+      // accidentally omits blink: true.
+      shouldBlink = landing == null &&
+        (status.timeBlink || status.statusValue === "DELAYED");
     }
 
     if (shouldBlink) {
@@ -191,6 +239,23 @@
     var slots = [];
     var messageState = { index: 0, lastAdvanceTick: 0 };
     var generative = Staging.isGenerative(state.staging);
+    var swapPercent = generative
+      ? Math.max(0, Math.min(100, Number(state.staging.rowSwapPercent) || 0))
+      : 0;
+    var revealTiming = generative
+      ? Staging.refreshTiming(state.staging, state.tickMs || 250, columns.length)
+      : null;
+    var revealDuration = revealTiming
+      ? revealTiming.blankTicks + columns.length * revealTiming.revealTicks
+      : 0;
+    var swapStarts = {}; // slot index -> { tick, flightId }; reset on page change
+    var burstStarts = {}; // slot index -> { tick, flightId, segment, status }
+    var burstQueue = [];  // scheduled refreshes for currently visible page
+    var burstConfig = generative ? (state.staging.burst || {}) : {};
+    var burstPeriod = burstConfig.checkSeconds > 0
+      ? Math.max(1, Math.round(burstConfig.checkSeconds * 1000 /
+          (state.tickMs || 250)))
+      : 0;
 
     container.innerHTML = "";
     container.appendChild(line("title")).textContent = centre(
@@ -253,7 +318,7 @@
       );
     }
 
-    function paintSlot(slot, row, tick) {
+    function paintSlot(slot, row, tick, refreshAge, forcedStatus) {
       slot.line.dataset.flight = row ? row.id : "";
       slot.cells.forEach(function (cell, cellIndex) {
         var source = row ? row.cells[cellIndex] : null;
@@ -261,7 +326,7 @@
         cell.row = row || null;
         cell.cellIndex = cellIndex;
         var text = source
-          ? cellTextForTick(row, source, cellIndex, state, tick || 0, generative)
+          ? cellTextForTick(row, source, cellIndex, state, tick || 0, generative, refreshAge, forcedStatus)
           : "";
         cell.el.textContent = source
           ? pad(text, cell.width, cell.align)
@@ -272,7 +337,31 @@
     function paintPage(tick) {
       var page = pages[pageIndex] || [];
       slots.forEach(function (slot, slotIndex) {
-        paintSlot(slot, page[slotIndex] || null, tick);
+        var row = page[slotIndex] || null;
+        var swap = swapStarts[slotIndex];
+        var burst = burstStarts[slotIndex];
+        var age = null;
+        var status = null;
+        if (swap && row && swap.flightId === row.id) {
+          age = tick - swap.tick;
+          if (age >= revealDuration) {
+            delete swapStarts[slotIndex];
+            age = null;
+          }
+        }
+        if (burst && row && burst.flightId === row.id) {
+          var current = Staging.segmentAt(row.id, tick, state.tickMs || 250,
+            state.staging);
+          // Keep burst status until the next ordinary refresh, but always
+          // play the same short full-row reveal at the start of the burst.
+          if (current.segment !== burst.segment) {
+            delete burstStarts[slotIndex];
+          } else {
+            status = burst.status;
+            if (tick - burst.tick < revealDuration) age = tick - burst.tick;
+          }
+        }
+        paintSlot(slot, row, tick, age, status);
       });
       paintFooter();
     }
@@ -315,8 +404,101 @@
       message.textContent = doubled.slice(offset, offset + width);
     }
 
+    // Exchange a visible flight with an off-screen one at the very start
+    // of its normal full-row refresh. This keeps all aircraft present exactly
+    // once and makes a changed row appear via the existing reveal cascade.
+    function swapOnRefresh(tick) {
+      if (!swapPercent || pages.length < 2 || tick <= 0) return;
+      var page = pages[pageIndex];
+      var staging = state.staging;
+      var tickMs = state.tickMs || 250;
+      var otherRows = [];
+      for (var p = 0; p < pages.length; p++) {
+        if (p === pageIndex) continue;
+        for (var j = 0; j < pages[p].length; j++) {
+          otherRows.push({ page: p, index: j });
+        }
+      }
+      if (!otherRows.length) return;
+
+      for (var i = 0; i < page.length; i++) {
+        var current = page[i];
+        var segment = Staging.segmentAt(current.id, tick, tickMs, staging);
+        // Do not swap when a page is merely shown, or during its first hold.
+        if (segment.segment === 0 || segment.age !== 0) continue;
+
+        var key = String(staging.seed) + ":row-swap:" + current.id +
+          ":" + segment.segment;
+        // Fractional percentages are allowed (e.g. 2.5).
+        var roll = Animations.hash(key) % 10000;
+        if (roll >= swapPercent * 100) continue;
+
+        var target = otherRows[Animations.hash(key + ":target") %
+          otherRows.length];
+        var incoming = pages[target.page][target.index];
+        pages[target.page][target.index] = current;
+        page[i] = incoming;
+        delete burstStarts[i];
+        swapStarts[i] = { tick: tick, flightId: incoming.id };
+      }
+    }
+
+    // Occasionally refresh a large proportion of the CURRENT page, with
+    // staggered starts from top to bottom. Selection/rolls are deterministic.
+    function updateBurst(tick) {
+      if (!burstPeriod || pages[pageIndex].length < 2) return;
+      if (tick > 0 && tick % burstPeriod === 0 && !burstQueue.length) {
+        var round = Math.floor(tick / burstPeriod);
+        var key = String(state.staging.seed) + ":burst:" + round;
+        var probability = Math.max(0, Math.min(100,
+          Number(burstConfig.chancePercent) || 0));
+        if (Animations.hash(key) % 10000 < probability * 100) {
+          var count = pages[pageIndex].length;
+          var low = Math.max(1, Math.ceil(count *
+            (burstConfig.minFraction == null ? 0.5 : burstConfig.minFraction)));
+          var high = Math.min(count, Math.floor(count *
+            (burstConfig.maxFraction == null ? 0.75 : burstConfig.maxFraction)));
+          high = Math.max(low, high);
+          var take = low + Animations.hash(key + ":count") % (high - low + 1);
+          var choices = [];
+          for (var i = 0; i < count; i++) choices.push(i);
+          // Select uniformly, then fire in SCREEN order.
+          for (var j = choices.length - 1; j > 0; j--) {
+            var k = Animations.hash(key + ":pick:" + j) % (j + 1);
+            var temp = choices[j]; choices[j] = choices[k]; choices[k] = temp;
+          }
+          choices = choices.slice(0, take).sort(function(a,b){return a-b;});
+          var delayTicks = Math.max(1, Math.round(
+            (Number(burstConfig.rowStepSeconds) || 0.65) * 1000 /
+            (state.tickMs || 250)));
+          burstQueue = choices.map(function(index, position) {
+            return { tick: tick + position * delayTicks, slot: index };
+          });
+        }
+      }
+      while (burstQueue.length && burstQueue[0].tick <= tick) {
+        var task = burstQueue.shift();
+        var row = pages[pageIndex][task.slot];
+        if (!row) continue;
+        var currentSegment = Staging.segmentAt(row.id, tick,
+          state.tickMs || 250, state.staging);
+        // A burst refresh re-rolls the displayed status rather than merely
+        // blanking/revealing an unchanged ETA or DELAYED value.
+        burstStarts[task.slot] = {
+          tick: tick,
+          flightId: row.id,
+          segment: currentSegment.segment,
+          status: Staging.statusForRefresh(row.id,
+            "burst:" + tick + ":page:" + pageIndex, state.staging),
+        };
+        delete swapStarts[task.slot];
+      }
+    }
+
     function update(tick) {
       if (generative) {
+        swapOnRefresh(tick);
+        updateBurst(tick);
         paintPage(tick);
       }
       paintMessage(tick);
@@ -336,6 +518,9 @@
       setPage: function (index, tick) {
         var count = pages.length;
         pageIndex = ((index % count) + count) % count;
+        swapStarts = {};
+        burstStarts = {};
+        burstQueue = [];
         paintPage(tick || 0);
         return pageIndex;
       },

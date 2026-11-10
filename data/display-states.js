@@ -23,8 +23,8 @@
  *   enabled      boolean  set false to hide the column without deleting it
  *
  * Staging spec (generative, see js/animations.js Staging):
- *   seed, statuses[{ weight, value?, blink? }], holdSeconds{ min, max },
- *   gateBlinkChance, refresh{ blankSeconds, columnRevealSeconds },
+ *   seed, statuses[{ weight, value?, eta?, blink? }], holdSeconds{ min, max },
+ *   etaJitterMinutes, refresh{ blankSeconds, columnRevealSeconds },
  *   blink{ periodTicks, onTicks }
  */
 window.FIDS_DATA = window.FIDS_DATA || {};
@@ -63,6 +63,7 @@ window.FIDS_DATA.displayStates = {
      * The board says very little, because very little was known.
      * --------------------------------------------------------------- */
     "arrival-chaos": {
+      order: { mode: "shuffle", seed: "gander-arrival-rows" },
       label: "Arrivals",
       header: {
         left: "ARRIVALS",
@@ -84,12 +85,6 @@ window.FIDS_DATA.displayStates = {
         },
         { key: "from", label: "FROM", width: 22, field: "origin" },
         {
-          key: "gate",
-          label: "GATE",
-          width: 8,
-          placeholder: "----",
-        },
-        {
           key: "time",
           label: "TIME",
           width: 10,
@@ -107,13 +102,29 @@ window.FIDS_DATA.displayStates = {
       },
       staging: {
         seed: "gander-2001",
+        // A time is the norm, but rows occasionally lose information.
+        // These are weighted per row refresh; no fabricated landing time is
+        // ever written to the historical data.
         statuses: [
-          { weight: 50 },
-          { weight: 25, blink: true },
-          { weight: 25, value: "EXPECTED", blink: true },
+          { weight: 20, eta: true },
+          { weight: 30, value: "DUE" },
+          { weight: 30, value: "DELAYED", blink: true },
+          { weight: 20, value: "--:--" },
         ],
-        holdSeconds: { min: 20, max: 120 },
-        gateBlinkChance: 10,
+        etaJitterMinutes: 5,
+        // On roughly 3% of full-row refreshes, exchange this flight
+        // with one on another page (never a visible row).
+        rowSwapPercent: 3,
+        // Periodically consider a broad on-screen update. When triggered,
+        // refresh 50–75% of the visible rows, cascading top-to-bottom.
+        burst: {
+          checkSeconds: 45,
+          chancePercent: 35,
+          minFraction: 0.5,
+          maxFraction: 0.75,
+          rowStepSeconds: 0.65,
+        },
+        holdSeconds: { min: 10, max: 60 },
         refresh: {
           blankSeconds: 0.5,
           columnRevealSeconds: 0.25,
@@ -130,6 +141,7 @@ window.FIDS_DATA.displayStates = {
      * flashing, nothing uncertain. All of them left.
      * --------------------------------------------------------------- */
     "departures": {
+      order: { mode: "shuffle", seed: "gander-departure-rows" },
       label: "Departures",
       header: {
         left: "DEPARTURES",

@@ -63,7 +63,6 @@
     var minTicks = secondsToTicks(minSec, tickMs);
     var maxTicks = secondsToTicks(maxSec, tickMs);
     var span = maxTicks - minTicks + 1;
-    var chance = Math.max(1, staging.gateBlinkChance | 0 || 4);
     var statuses = staging.statuses;
     var t = 0;
     var segment = 0;
@@ -72,7 +71,6 @@
     while (safety++ < 100000) {
       var holdHash = hash(seed + ":" + flightId + ":hold:" + segment);
       var statusHash = hash(seed + ":" + flightId + ":status:" + segment);
-      var gateHash = hash(seed + ":" + flightId + ":gate:" + segment);
       var holdTicks = minTicks + (holdHash % span);
       var picked = pickWeighted(statuses, statusHash);
       if (tick < t + holdTicks) {
@@ -82,8 +80,11 @@
           holdTicks: holdTicks,
           age: tick - t,
           statusValue: picked.value != null ? picked.value : null,
+          useEta: !!picked.eta,
+          etaOffsetMinutes: (hash(seed + ":" + flightId + ":eta:" + segment) %
+            (2 * Math.max(0, staging.etaJitterMinutes | 0) + 1)) -
+            Math.max(0, staging.etaJitterMinutes | 0),
           timeBlink: !!picked.blink,
-          gateBlink: gateHash % chance === 0,
         };
       }
       t += holdTicks;
@@ -96,8 +97,23 @@
       holdTicks: minTicks,
       age: 0,
       statusValue: null,
+      useEta: false,
+      etaOffsetMinutes: 0,
       timeBlink: false,
-      gateBlink: false,
+    };
+  }
+
+  // Independent status roll for a forced row refresh. Unlike the regular
+  // segment timeline, this can occur mid-hold during a page-wide burst.
+  function statusForRefresh(flightId, refreshKey, staging) {
+    var seed = String(staging.seed) + ":" + flightId + ":forced:" + refreshKey;
+    var picked = pickWeighted(staging.statuses, hash(seed + ":status"));
+    var jitter = Math.max(0, staging.etaJitterMinutes | 0);
+    return {
+      statusValue: picked.value != null ? picked.value : null,
+      useEta: !!picked.eta,
+      etaOffsetMinutes: (hash(seed + ":eta") % (2 * jitter + 1)) - jitter,
+      timeBlink: !!picked.blink,
     };
   }
 
@@ -153,6 +169,7 @@
   global.FIDS.Staging = {
     isGenerative: isGenerative,
     segmentAt: segmentAt,
+    statusForRefresh: statusForRefresh,
     refreshTiming: refreshTiming,
     columnVisible: columnVisible,
   };
