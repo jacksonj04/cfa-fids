@@ -26,7 +26,7 @@ fullscreen.
 
 | URL                              | What it is                                                                                                                                                          |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html?state=arrival-chaos` | The airport during the diversion. Seeded chaos: rows refresh slowly, ETAs drift a few minutes around fictional landing times and sometimes change to `DUE`, `DELAYED`, `EXPECTED` or `--:--`, with occasional blinking.                                   |
+| `index.html?state=arrival-chaos` | The airport during the diversion. Seeded chaos: rows refresh slowly, ETAs drift a few minutes around fictional landing times and sometimes change to `DUE`, `DELAYED`, `EXPECTED` or a blank cell, with `DELAYED` always flashing.                                   |
 | `index.html?state=departures`    | The aftermath. The same 38 aircraft, every one of them `DEPARTED`. Calm scrolling messages, no chaos staging.                                                        |
 
 Both states paginate the same 38 flights: 16 rows per page, three pages,
@@ -139,14 +139,13 @@ uses a **separately seeded shuffle** for pagination (as does departures), while
 the simulated landing positions remain attached to their flight IDs. The
 landing sequence is not displayed as sorted arrival order.
 
-Each flight refreshes independently on a seeded cycle (20–120 seconds). It
+Each flight refreshes independently on a seeded cycle (10–60 seconds). It
 blanks and reveals its columns from left to right, then shows one of these:
 
-- 65%: the simulated ETA, independently varied by ±5 minutes
+- 60%: the simulated ETA, independently varied by ±5 minutes
 - 15%: `DUE`
-- 8%: `DELAYED` (blinking)
-- 6%: `EXPECTED` (blinking)
-- 6%: `--:--`
+- 15%: `DELAYED` (always flashing)
+- 10%: an **empty TIME cell** (no placeholder)
 
 This is **not** a running historical clock. All 38 rows remain on the board;
 the visible information changes as though updates are arriving in the airport.
@@ -161,15 +160,14 @@ Configure the pool, ETA jitter, refresh cadence and blink in
 staging: {
   seed: "gander-2001",
   statuses: [
-    { weight: 65, eta: true },
+    { weight: 60, eta: true },
     { weight: 15, value: "DUE" },
-    { weight: 8, value: "DELAYED", blink: true },
-    { weight: 6, value: "EXPECTED", blink: true },
-    { weight: 6 },
+    { weight: 15, value: "DELAYED", blink: true },
+    { weight: 10, value: "" },
   ],
   etaJitterMinutes: 5,
   rowSwapPercent: 3, // chance per visible row's refresh; off-screen swap only
-  holdSeconds: { min: 20, max: 120 },
+  holdSeconds: { min: 10, max: 60 },
   refresh: { blankSeconds: 0.5, columnRevealSeconds: 0.25 },
   blink: { periodTicks: 12, onTicks: 7 },
 },
