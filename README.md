@@ -32,8 +32,12 @@ fullscreen.
 Both states paginate the same 38 flights: 16 rows per page, three pages,
 rotating automatically. Rows are shuffled independently in each state using
 fixed seeds, so flights from the same origin no longer appear grouped. The
-order is stable between reloads and during pagination, not constantly jumping
-around; you can change each board's order seed in `data/display-states.js`.
+initial order is stable between reloads and doesn't reshuffle on every
+page rotation. During arrivals, roughly 3% of full-row refreshes exchange
+that row with a flight on another page. This uses a seeded choice, preserves
+all 38 flights exactly once and plays the usual blank-and-reveal animation
+for the incoming flight. Departures retains a static shuffled order. You
+can change each board's order seed in `data/display-states.js`.
 
 ## Controls
 
@@ -164,6 +168,7 @@ staging: {
     { weight: 6 },
   ],
   etaJitterMinutes: 5,
+  rowSwapPercent: 3, // chance per visible row's refresh; off-screen swap only
   holdSeconds: { min: 20, max: 120 },
   refresh: { blankSeconds: 0.5, columnRevealSeconds: 0.25 },
   blink: { periodTicks: 12, onTicks: 7 },
