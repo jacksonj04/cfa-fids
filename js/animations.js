@@ -82,6 +82,10 @@
           holdTicks: holdTicks,
           age: tick - t,
           statusValue: picked.value != null ? picked.value : null,
+          useEta: !!picked.eta,
+          etaOffsetMinutes: (hash(seed + ":" + flightId + ":eta:" + segment) %
+            (2 * Math.max(0, staging.etaJitterMinutes | 0) + 1)) -
+            Math.max(0, staging.etaJitterMinutes | 0),
           timeBlink: !!picked.blink,
           gateBlink: gateHash % chance === 0,
         };
@@ -96,6 +100,8 @@
       holdTicks: minTicks,
       age: 0,
       statusValue: null,
+      useEta: false,
+      etaOffsetMinutes: 0,
       timeBlink: false,
       gateBlink: false,
     };
