@@ -56,7 +56,25 @@
     }, 0);
   }
 
+  // Stable shuffle: the same seed and flight IDs always produce the same
+  // pagination, regardless of the input dataset's original grouping.
+  function shuffleFlights(flights, seed) {
+    var result = flights.slice().sort(function (a, b) {
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    for (var i = result.length - 1; i > 0; i--) {
+      var j = Animations.hash(String(seed) + ":row:" + i) % (i + 1);
+      var item = result[i];
+      result[i] = result[j];
+      result[j] = item;
+    }
+    return result;
+  }
+
   function orderFlights(flights, order, simulation) {
+    if (order && order.mode === "shuffle") {
+      return shuffleFlights(flights, order.seed || "gander-rows");
+    }
     if (order && order.mode === "simulation") {
       var schedule = simulation || {};
       return flights.slice().sort(function (a, b) {
