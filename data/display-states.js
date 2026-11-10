@@ -113,6 +113,9 @@ window.FIDS_DATA.displayStates = {
           { weight: 6 },
         ],
         etaJitterMinutes: 5,
+        // On roughly 3% of full-row refreshes, exchange this flight
+        // with one on another page (never a visible row).
+        rowSwapPercent: 3,
         holdSeconds: { min: 20, max: 120 },
         refresh: {
           blankSeconds: 0.5,
