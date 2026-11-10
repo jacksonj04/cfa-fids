@@ -106,15 +106,24 @@ window.FIDS_DATA.displayStates = {
         // These are weighted per row refresh; no fabricated landing time is
         // ever written to the historical data.
         statuses: [
-          { weight: 60, eta: true },
-          { weight: 15, value: "DUE" },
-          { weight: 15, value: "DELAYED", blink: true },
-          { weight: 10, value: "" },
+          { weight: 20, eta: true },
+          { weight: 30, value: "DUE" },
+          { weight: 30, value: "DELAYED", blink: true },
+          { weight: 20, value: "--:--" },
         ],
         etaJitterMinutes: 5,
         // On roughly 3% of full-row refreshes, exchange this flight
         // with one on another page (never a visible row).
         rowSwapPercent: 3,
+        // Periodically consider a broad on-screen update. When triggered,
+        // refresh 50–75% of the visible rows, cascading top-to-bottom.
+        burst: {
+          checkSeconds: 45,
+          chancePercent: 35,
+          minFraction: 0.5,
+          maxFraction: 0.75,
+          rowStepSeconds: 0.65,
+        },
         holdSeconds: { min: 10, max: 60 },
         refresh: {
           blankSeconds: 0.5,
