@@ -142,7 +142,8 @@ blanks and reveals its columns from left to right, then shows one of these:
 This is **not** a running historical clock. All 38 rows remain on the board;
 the visible information changes as though updates are arriving in the airport.
 There's deliberately no `CANCELLED` state: the aircraft on this board really
-did land at Gander. Gates remain unknown (`----`) with occasional blink.
+did land at Gander. There is no gate column: the terminal had very limited
+gate infrastructure, and most diverted aircraft were parked remotely.
 
 Configure the pool, ETA jitter, refresh cadence and blink in
 `data/display-states.js`. For example:
@@ -159,7 +160,6 @@ staging: {
   ],
   etaJitterMinutes: 5,
   holdSeconds: { min: 20, max: 120 },
-  gateBlinkChance: 10,
   refresh: { blankSeconds: 0.5, columnRevealSeconds: 0.25 },
   blink: { periodTicks: 12, onTicks: 7 },
 },
