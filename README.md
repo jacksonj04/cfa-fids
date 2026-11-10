@@ -26,7 +26,7 @@ fullscreen.
 
 | URL                              | What it is                                                                                                                                                          |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html?state=arrival-chaos` | The airport during the diversion. Seeded chaos: rows refresh slowly, times flip between `--:--` and `EXPECTED`, some blinking.                                   |
+| `index.html?state=arrival-chaos` | The airport during the diversion. Seeded chaos: rows refresh slowly, ETAs drift a few minutes around fictional landing times and sometimes change to `DUE`, `DELAYED`, `EXPECTED` or `--:--`, with occasional blinking.                                   |
 | `index.html?state=departures`    | The aftermath. The same 38 aircraft, every one of them `DEPARTED`. Calm scrolling messages, no chaos staging.                                                        |
 
 Both states paginate the same 38 flights: 16 rows per page, three pages,
@@ -68,8 +68,9 @@ only piece of modern UI in the app.
 
 ## Editing the flights
 
-Everything historical lives in `data/flights.js`, and nothing else in the app
-contains flight information. Edit that file and reload.
+Everything historical lives in `data/flights.js`. Fictional arrival ordering and ETAs
+live separately in `data/arrival-simulation.js`, so no simulated values are
+mistaken for historical facts. Edit either file and reload.
 
 ```js
 {
@@ -90,10 +91,10 @@ contains flight information. Edit that file and reload.
 Two rules the app is built around:
 
 - **Unknown means `null`.** Every time field in the current dataset is `null`,
-  because the landing and departure times have not been established. The board
-  renders `--:--` for these. Do not populate them with plausible-looking times
-  to fill the column; add them as evidence turns up and the board will show
-  them immediately.
+  because the landing and departure times have not been established. The
+  arrivals board uses a **separate fictional schedule** to dress the unknown
+  landing times; a genuine `landingTime` overrides simulation. Do not put
+  invented times in `data/flights.js`.
 - **Uncertainty is preserved, not tidied away.** The Aeroflot Paris–New York
   LaGuardia row is marked `confidence: "low"`: no matching 2001 schedule was
   found (Aeroflot’s real New York flights were Moscow–JFK as SU 100/101/102).
@@ -123,32 +124,50 @@ present), so it stays aligned like a character terminal rather than a table.
 
 ### Staging (arrivals chaos)
 
-Arrivals uses generative staging — no per-flight overrides. Each row walks a
-seeded timeline of segments. At the start of a segment the row blanks, then
-reveals columns left-to-right like a slow feed; it then holds a time status
-from a weighted pool for a random duration (20–120s by default) before
-re-rolling status, hold length, and blink flags.
+The 38 flights have a fixed **fictional** arrival order and estimated times in
+`data/arrival-simulation.js`. None of the times are claimed to be a real
+touchdown timestamp. The first, roughly middle, and last few positions are
+inspired by eyewitness accounts; the others are speculative. The arrivals board
+uses this order for pagination; departures retains the original data order.
+
+Each flight refreshes independently on a seeded cycle (20–120 seconds). It
+blanks and reveals its columns from left to right, then shows one of these:
+
+- 65%: the simulated ETA, independently varied by ±5 minutes
+- 15%: `DUE`
+- 8%: `DELAYED` (blinking)
+- 6%: `EXPECTED` (blinking)
+- 6%: `--:--`
+
+This is **not** a running historical clock. All 38 rows remain on the board;
+the visible information changes as though updates are arriving in the airport.
+There's deliberately no `CANCELLED` state: the aircraft on this board really
+did land at Gander. Gates remain unknown (`----`) with occasional blink.
+
+Configure the pool, ETA jitter, refresh cadence and blink in
+`data/display-states.js`. For example:
 
 ```js
 staging: {
   seed: "gander-2001",
   statuses: [
-    { weight: 50 },                            // --:--
-    { weight: 25, blink: true },               // blinking unknown
-    { weight: 25, value: "EXPECTED", blink: true },
+    { weight: 65, eta: true },
+    { weight: 15, value: "DUE" },
+    { weight: 8, value: "DELAYED", blink: true },
+    { weight: 6, value: "EXPECTED", blink: true },
+    { weight: 6 },
   ],
+  etaJitterMinutes: 5,
   holdSeconds: { min: 20, max: 120 },
-  gateBlinkChance: 10,                         // 1 in 10 refreshes
+  gateBlinkChance: 10,
   refresh: { blankSeconds: 0.5, columnRevealSeconds: 0.25 },
   blink: { periodTicks: 12, onTicks: 7 },
 },
 ```
 
-Same seed → same timeline. Pass `?seed=other` to reshuffle without editing
-config. A real `landingTime` in `flights.js` still overrides the pool for that
-flight. Gate cells stay as placeholders; on roughly one in ten refreshes the
-gate blinks. Blink rate is fixed board-wide; phase is hashed per cell so rows
-drift out of sync.
+Same seed → same refreshes and ETA changes. Pass `?seed=other` to
+reshuffle. A genuine `landingTime` in `data/flights.js` always takes
+precedence. The departures board is unaffected.
 
 ### Blink
 
@@ -194,6 +213,7 @@ js/fids.js                 display engine: data + state -> character grid
 js/states.js               loads and merges display states
 js/app.js                  bootstrap, URL parameters, keyboard, tick loop
 data/flights.js            historical data only
+data/arrival-simulation.js fictional landing order and times; theatrical only
 data/display-states.js     presentation configuration only
 ```
 
