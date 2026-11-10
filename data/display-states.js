@@ -63,7 +63,7 @@ window.FIDS_DATA.displayStates = {
      * The board says very little, because very little was known.
      * --------------------------------------------------------------- */
     "arrival-chaos": {
-      order: { mode: "simulation" },
+      order: { mode: "shuffle", seed: "gander-arrival-rows" },
       label: "Arrivals",
       header: {
         left: "ARRIVALS",
@@ -130,6 +130,7 @@ window.FIDS_DATA.displayStates = {
      * flashing, nothing uncertain. All of them left.
      * --------------------------------------------------------------- */
     "departures": {
+      order: { mode: "shuffle", seed: "gander-departure-rows" },
       label: "Departures",
       header: {
         left: "DEPARTURES",
