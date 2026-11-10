@@ -160,7 +160,7 @@
   }
 
   function shiftEta(eta, minutes) {
-    if (!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(eta || "")) return null;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(eta || "")) return null;
     var parts = eta.split(":");
     var total = Number(parts[0]) * 60 + Number(parts[1]) + minutes;
     total = ((total % 1440) + 1440) % 1440;
