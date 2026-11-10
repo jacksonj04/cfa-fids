@@ -56,7 +56,17 @@
     }, 0);
   }
 
-  function orderFlights(flights, order) {
+  function orderFlights(flights, order, simulation) {
+    if (order && order.mode === "simulation") {
+      var schedule = simulation || {};
+      return flights.slice().sort(function (a, b) {
+        var left = schedule[a.id] && schedule[a.id].order;
+        var right = schedule[b.id] && schedule[b.id].order;
+        if (left == null) return right == null ? 0 : 1;
+        if (right == null) return -1;
+        return left - right;
+      });
+    }
     if (!order || order.mode === "dataset" || !order.by) return flights.slice();
     var keys = Array.isArray(order.by) ? order.by : [order.by];
     var direction = order.direction === "desc" ? -1 : 1;
@@ -99,7 +109,7 @@
 
   /** Data -> display rows. Pure; useful on its own for checking a dataset. */
   function buildRows(flights, state) {
-    return orderFlights(flights, state.order).map(function (flight) {
+    return orderFlights(flights, state.order, global.FIDS_DATA && global.FIDS_DATA.arrivalSimulation).map(function (flight) {
       return {
         id: flight.id,
         flight: flight,
@@ -131,6 +141,15 @@
     return el;
   }
 
+  function shiftEta(eta, minutes) {
+    if (!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(eta || "")) return null;
+    var parts = eta.split(":");
+    var total = Number(parts[0]) * 60 + Number(parts[1]) + minutes;
+    total = ((total % 1440) + 1440) % 1440;
+    return ("0" + Math.floor(total / 60)).slice(-2) + ":" +
+      ("0" + total % 60).slice(-2);
+  }
+
   function cellTextForTick(row, cell, cellIndex, state, tick, generative) {
     if (!generative) return cell.text;
 
@@ -152,6 +171,13 @@
           : null;
       if (landing != null) {
         text = landing;
+      } else if (segment.useEta) {
+        var schedule = global.FIDS_DATA && global.FIDS_DATA.arrivalSimulation;
+        var simulated = schedule && schedule[row.id];
+        text = simulated
+          ? (shiftEta(simulated.eta, segment.etaOffsetMinutes) ||
+            placeholderFor(column, state))
+          : placeholderFor(column, state);
       } else if (segment.statusValue != null) {
         text = transform(String(segment.statusValue), state.transform);
       } else {
