@@ -63,6 +63,7 @@ window.FIDS_DATA.displayStates = {
      * The board says very little, because very little was known.
      * --------------------------------------------------------------- */
     "arrival-chaos": {
+      order: { mode: "simulation" },
       label: "Arrivals",
       header: {
         left: "ARRIVALS",
@@ -107,11 +108,17 @@ window.FIDS_DATA.displayStates = {
       },
       staging: {
         seed: "gander-2001",
+        // A time is the norm, but rows occasionally lose information.
+        // These are weighted per row refresh; no fabricated landing time is
+        // ever written to the historical data.
         statuses: [
-          { weight: 50 },
-          { weight: 25, blink: true },
-          { weight: 25, value: "EXPECTED", blink: true },
+          { weight: 65, eta: true },
+          { weight: 15, value: "DUE" },
+          { weight: 8, value: "DELAYED", blink: true },
+          { weight: 6, value: "EXPECTED", blink: true },
+          { weight: 6 },
         ],
+        etaJitterMinutes: 5,
         holdSeconds: { min: 20, max: 120 },
         gateBlinkChance: 10,
         refresh: {
