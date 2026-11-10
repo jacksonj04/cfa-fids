@@ -30,7 +30,10 @@ fullscreen.
 | `index.html?state=departures`    | The aftermath. The same 38 aircraft, every one of them `DEPARTED`. Calm scrolling messages, no chaos staging.                                                        |
 
 Both states paginate the same 38 flights: 16 rows per page, three pages,
-rotating automatically.
+rotating automatically. Rows are shuffled independently in each state using
+fixed seeds, so flights from the same origin no longer appear grouped. The
+order is stable between reloads and during pagination, not constantly jumping
+around; you can change each board's order seed in `data/display-states.js`.
 
 ## Controls
 
@@ -128,7 +131,9 @@ The 38 flights have a fixed **fictional** arrival order and estimated times in
 `data/arrival-simulation.js`. None of the times are claimed to be a real
 touchdown timestamp. The first, roughly middle, and last few positions are
 inspired by eyewitness accounts; the others are speculative. The arrivals board
-uses this order for pagination; departures retains the original data order.
+uses a **separately seeded shuffle** for pagination (as does departures), while
+the simulated landing positions remain attached to their flight IDs. The
+landing sequence is not displayed as sorted arrival order.
 
 Each flight refreshes independently on a seeded cycle (20–120 seconds). It
 blanks and reveals its columns from left to right, then shows one of these:
