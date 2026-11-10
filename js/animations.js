@@ -88,6 +88,11 @@
             Math.max(0, staging.etaJitterMinutes | 0),
           timeBlink: !!picked.blink,
           gateBlink: gateHash % chance === 0,
+          gateIndex: (hash(seed + ":" + flightId + ":gate-number:" + segment) % 100) <
+            Math.max(0, Math.min(100, staging.gateAssignmentPercent || 0))
+            ? hash(seed + ":" + flightId + ":gate-choice:" + segment) %
+              ((staging.gates && staging.gates.length) || 1)
+            : -1,
         };
       }
       t += holdTicks;
@@ -104,6 +109,7 @@
       etaOffsetMinutes: 0,
       timeBlink: false,
       gateBlink: false,
+      gateIndex: -1,
     };
   }
 
