@@ -168,13 +168,14 @@
       ("0" + total % 60).slice(-2);
   }
 
-  function cellTextForTick(row, cell, cellIndex, state, tick, generative, refreshAge) {
+  function cellTextForTick(row, cell, cellIndex, state, tick, generative, refreshAge, forcedStatus) {
     if (!generative) return cell.text;
 
     var staging = state.staging;
     var tickMs = state.tickMs || 250;
     var segment = Staging.segmentAt(row.id, tick, tickMs, staging);
     var timing = Staging.refreshTiming(staging, tickMs, state.columns.length);
+    var status = forcedStatus || segment;
 
     // A newly swapped-in flight gets the full blank-and-reveal treatment,
     // even if its own seeded refresh timeline is part-way through a hold.
@@ -192,22 +193,22 @@
           : null;
       if (landing != null) {
         text = landing;
-      } else if (segment.useEta) {
+      } else if (status.useEta) {
         var schedule = global.FIDS_DATA && global.FIDS_DATA.arrivalSimulation;
         var simulated = schedule && schedule[row.id];
         text = simulated
-          ? (shiftEta(simulated.eta, segment.etaOffsetMinutes) ||
+          ? (shiftEta(simulated.eta, status.etaOffsetMinutes) ||
             placeholderFor(column, state))
           : placeholderFor(column, state);
-      } else if (segment.statusValue != null) {
-        text = transform(String(segment.statusValue), state.transform);
+      } else if (status.statusValue != null) {
+        text = transform(String(status.statusValue), state.transform);
       } else {
         text = placeholderFor(column, state);
       }
       // DELAYED always flashes, even if a future status configuration
       // accidentally omits blink: true.
       shouldBlink = landing == null &&
-        (segment.timeBlink || segment.statusValue === "DELAYED");
+        (status.timeBlink || status.statusValue === "DELAYED");
     }
 
     if (shouldBlink) {
@@ -248,6 +249,13 @@
       ? revealTiming.blankTicks + columns.length * revealTiming.revealTicks
       : 0;
     var swapStarts = {}; // slot index -> { tick, flightId }; reset on page change
+    var burstStarts = {}; // slot index -> { tick, flightId, segment, status }
+    var burstQueue = [];  // scheduled refreshes for currently visible page
+    var burstConfig = generative ? (state.staging.burst || {}) : {};
+    var burstPeriod = burstConfig.checkSeconds > 0
+      ? Math.max(1, Math.round(burstConfig.checkSeconds * 1000 /
+          (state.tickMs || 250)))
+      : 0;
 
     container.innerHTML = "";
     container.appendChild(line("title")).textContent = centre(
@@ -310,7 +318,7 @@
       );
     }
 
-    function paintSlot(slot, row, tick, refreshAge) {
+    function paintSlot(slot, row, tick, refreshAge, forcedStatus) {
       slot.line.dataset.flight = row ? row.id : "";
       slot.cells.forEach(function (cell, cellIndex) {
         var source = row ? row.cells[cellIndex] : null;
@@ -318,7 +326,7 @@
         cell.row = row || null;
         cell.cellIndex = cellIndex;
         var text = source
-          ? cellTextForTick(row, source, cellIndex, state, tick || 0, generative, refreshAge)
+          ? cellTextForTick(row, source, cellIndex, state, tick || 0, generative, refreshAge, forcedStatus)
           : "";
         cell.el.textContent = source
           ? pad(text, cell.width, cell.align)
@@ -331,7 +339,9 @@
       slots.forEach(function (slot, slotIndex) {
         var row = page[slotIndex] || null;
         var swap = swapStarts[slotIndex];
+        var burst = burstStarts[slotIndex];
         var age = null;
+        var status = null;
         if (swap && row && swap.flightId === row.id) {
           age = tick - swap.tick;
           if (age >= revealDuration) {
@@ -339,7 +349,19 @@
             age = null;
           }
         }
-        paintSlot(slot, row, tick, age);
+        if (burst && row && burst.flightId === row.id) {
+          var current = Staging.segmentAt(row.id, tick, state.tickMs || 250,
+            state.staging);
+          // Keep burst status until the next ordinary refresh, but always
+          // play the same short full-row reveal at the start of the burst.
+          if (current.segment !== burst.segment) {
+            delete burstStarts[slotIndex];
+          } else {
+            status = burst.status;
+            if (tick - burst.tick < revealDuration) age = tick - burst.tick;
+          }
+        }
+        paintSlot(slot, row, tick, age, status);
       });
       paintFooter();
     }
@@ -416,13 +438,67 @@
         var incoming = pages[target.page][target.index];
         pages[target.page][target.index] = current;
         page[i] = incoming;
+        delete burstStarts[i];
         swapStarts[i] = { tick: tick, flightId: incoming.id };
+      }
+    }
+
+    // Occasionally refresh a large proportion of the CURRENT page, with
+    // staggered starts from top to bottom. Selection/rolls are deterministic.
+    function updateBurst(tick) {
+      if (!burstPeriod || pages[pageIndex].length < 2) return;
+      if (tick > 0 && tick % burstPeriod === 0 && !burstQueue.length) {
+        var round = Math.floor(tick / burstPeriod);
+        var key = String(state.staging.seed) + ":burst:" + round;
+        var probability = Math.max(0, Math.min(100,
+          Number(burstConfig.chancePercent) || 0));
+        if (Animations.hash(key) % 10000 < probability * 100) {
+          var count = pages[pageIndex].length;
+          var low = Math.max(1, Math.ceil(count *
+            (burstConfig.minFraction == null ? 0.5 : burstConfig.minFraction)));
+          var high = Math.min(count, Math.floor(count *
+            (burstConfig.maxFraction == null ? 0.75 : burstConfig.maxFraction)));
+          high = Math.max(low, high);
+          var take = low + Animations.hash(key + ":count") % (high - low + 1);
+          var choices = [];
+          for (var i = 0; i < count; i++) choices.push(i);
+          // Select uniformly, then fire in SCREEN order.
+          for (var j = choices.length - 1; j > 0; j--) {
+            var k = Animations.hash(key + ":pick:" + j) % (j + 1);
+            var temp = choices[j]; choices[j] = choices[k]; choices[k] = temp;
+          }
+          choices = choices.slice(0, take).sort(function(a,b){return a-b;});
+          var delayTicks = Math.max(1, Math.round(
+            (Number(burstConfig.rowStepSeconds) || 0.65) * 1000 /
+            (state.tickMs || 250)));
+          burstQueue = choices.map(function(index, position) {
+            return { tick: tick + position * delayTicks, slot: index };
+          });
+        }
+      }
+      while (burstQueue.length && burstQueue[0].tick <= tick) {
+        var task = burstQueue.shift();
+        var row = pages[pageIndex][task.slot];
+        if (!row) continue;
+        var currentSegment = Staging.segmentAt(row.id, tick,
+          state.tickMs || 250, state.staging);
+        // A burst refresh re-rolls the displayed status rather than merely
+        // blanking/revealing an unchanged ETA or DELAYED value.
+        burstStarts[task.slot] = {
+          tick: tick,
+          flightId: row.id,
+          segment: currentSegment.segment,
+          status: Staging.statusForRefresh(row.id,
+            "burst:" + tick + ":page:" + pageIndex, state.staging),
+        };
+        delete swapStarts[task.slot];
       }
     }
 
     function update(tick) {
       if (generative) {
         swapOnRefresh(tick);
+        updateBurst(tick);
         paintPage(tick);
       }
       paintMessage(tick);
@@ -443,6 +519,8 @@
         var count = pages.length;
         pageIndex = ((index % count) + count) % count;
         swapStarts = {};
+        burstStarts = {};
+        burstQueue = [];
         paintPage(tick || 0);
         return pageIndex;
       },
