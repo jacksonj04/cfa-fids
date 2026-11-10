@@ -204,7 +204,10 @@
       } else {
         text = placeholderFor(column, state);
       }
-      shouldBlink = segment.timeBlink && landing == null;
+      // DELAYED always flashes, even if a future status configuration
+      // accidentally omits blink: true.
+      shouldBlink = landing == null &&
+        (segment.timeBlink || segment.statusValue === "DELAYED");
     }
 
     if (shouldBlink) {
