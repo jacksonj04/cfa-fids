@@ -168,7 +168,7 @@
       ("0" + total % 60).slice(-2);
   }
 
-  function cellTextForTick(row, cell, cellIndex, state, tick, generative) {
+  function cellTextForTick(row, cell, cellIndex, state, tick, generative, refreshAge) {
     if (!generative) return cell.text;
 
     var staging = state.staging;
@@ -176,7 +176,10 @@
     var segment = Staging.segmentAt(row.id, tick, tickMs, staging);
     var timing = Staging.refreshTiming(staging, tickMs, state.columns.length);
 
-    if (!Staging.columnVisible(segment.age, cellIndex, timing)) return "";
+    // A newly swapped-in flight gets the full blank-and-reveal treatment,
+    // even if its own seeded refresh timeline is part-way through a hold.
+    var age = refreshAge == null ? segment.age : refreshAge;
+    if (!Staging.columnVisible(age, cellIndex, timing)) return "";
 
     var column = state.columns[cellIndex];
     var text = cell.text;
@@ -232,6 +235,16 @@
     var slots = [];
     var messageState = { index: 0, lastAdvanceTick: 0 };
     var generative = Staging.isGenerative(state.staging);
+    var swapPercent = generative
+      ? Math.max(0, Math.min(100, Number(state.staging.rowSwapPercent) || 0))
+      : 0;
+    var revealTiming = generative
+      ? Staging.refreshTiming(state.staging, state.tickMs || 250, columns.length)
+      : null;
+    var revealDuration = revealTiming
+      ? revealTiming.blankTicks + columns.length * revealTiming.revealTicks
+      : 0;
+    var swapStarts = {}; // slot index -> { tick, flightId }; reset on page change
 
     container.innerHTML = "";
     container.appendChild(line("title")).textContent = centre(
@@ -294,7 +307,7 @@
       );
     }
 
-    function paintSlot(slot, row, tick) {
+    function paintSlot(slot, row, tick, refreshAge) {
       slot.line.dataset.flight = row ? row.id : "";
       slot.cells.forEach(function (cell, cellIndex) {
         var source = row ? row.cells[cellIndex] : null;
@@ -302,7 +315,7 @@
         cell.row = row || null;
         cell.cellIndex = cellIndex;
         var text = source
-          ? cellTextForTick(row, source, cellIndex, state, tick || 0, generative)
+          ? cellTextForTick(row, source, cellIndex, state, tick || 0, generative, refreshAge)
           : "";
         cell.el.textContent = source
           ? pad(text, cell.width, cell.align)
@@ -313,7 +326,17 @@
     function paintPage(tick) {
       var page = pages[pageIndex] || [];
       slots.forEach(function (slot, slotIndex) {
-        paintSlot(slot, page[slotIndex] || null, tick);
+        var row = page[slotIndex] || null;
+        var swap = swapStarts[slotIndex];
+        var age = null;
+        if (swap && row && swap.flightId === row.id) {
+          age = tick - swap.tick;
+          if (age >= revealDuration) {
+            delete swapStarts[slotIndex];
+            age = null;
+          }
+        }
+        paintSlot(slot, row, tick, age);
       });
       paintFooter();
     }
@@ -356,8 +379,47 @@
       message.textContent = doubled.slice(offset, offset + width);
     }
 
+    // Exchange a visible flight with an off-screen one at the very start
+    // of its normal full-row refresh. This keeps all aircraft present exactly
+    // once and makes a changed row appear via the existing reveal cascade.
+    function swapOnRefresh(tick) {
+      if (!swapPercent || pages.length < 2 || tick <= 0) return;
+      var page = pages[pageIndex];
+      var staging = state.staging;
+      var tickMs = state.tickMs || 250;
+      var otherRows = [];
+      for (var p = 0; p < pages.length; p++) {
+        if (p === pageIndex) continue;
+        for (var j = 0; j < pages[p].length; j++) {
+          otherRows.push({ page: p, index: j });
+        }
+      }
+      if (!otherRows.length) return;
+
+      for (var i = 0; i < page.length; i++) {
+        var current = page[i];
+        var segment = Staging.segmentAt(current.id, tick, tickMs, staging);
+        // Do not swap when a page is merely shown, or during its first hold.
+        if (segment.segment === 0 || segment.age !== 0) continue;
+
+        var key = String(staging.seed) + ":row-swap:" + current.id +
+          ":" + segment.segment;
+        // Fractional percentages are allowed (e.g. 2.5).
+        var roll = Animations.hash(key) % 10000;
+        if (roll >= swapPercent * 100) continue;
+
+        var target = otherRows[Animations.hash(key + ":target") %
+          otherRows.length];
+        var incoming = pages[target.page][target.index];
+        pages[target.page][target.index] = current;
+        page[i] = incoming;
+        swapStarts[i] = { tick: tick, flightId: incoming.id };
+      }
+    }
+
     function update(tick) {
       if (generative) {
+        swapOnRefresh(tick);
         paintPage(tick);
       }
       paintMessage(tick);
@@ -377,6 +439,7 @@
       setPage: function (index, tick) {
         var count = pages.length;
         pageIndex = ((index % count) + count) % count;
+        swapStarts = {};
         paintPage(tick || 0);
         return pageIndex;
       },
