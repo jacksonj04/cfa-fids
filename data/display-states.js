@@ -23,8 +23,8 @@
  *   enabled      boolean  set false to hide the column without deleting it
  *
  * Staging spec (generative, see js/animations.js Staging):
- *   seed, statuses[{ weight, value?, blink? }], holdSeconds{ min, max },
- *   gateBlinkChance, refresh{ blankSeconds, columnRevealSeconds },
+ *   seed, statuses[{ weight, value?, eta?, blink? }], holdSeconds{ min, max },
+ *   etaJitterMinutes, refresh{ blankSeconds, columnRevealSeconds },
  *   blink{ periodTicks, onTicks }
  */
 window.FIDS_DATA = window.FIDS_DATA || {};
@@ -85,12 +85,6 @@ window.FIDS_DATA.displayStates = {
         },
         { key: "from", label: "FROM", width: 22, field: "origin" },
         {
-          key: "gate",
-          label: "GATE",
-          width: 8,
-          placeholder: "----",
-        },
-        {
           key: "time",
           label: "TIME",
           width: 10,
@@ -120,12 +114,6 @@ window.FIDS_DATA.displayStates = {
         ],
         etaJitterMinutes: 5,
         holdSeconds: { min: 20, max: 120 },
-        // Gander's small passenger terminal appears to have had one gate.
-        // 2001 numbering is unverified: deliberately restrict staging to "1".
-        // Almost every refresh keeps the gate unknown.
-        gates: ["1"],
-        gateAssignmentPercent: 5,
-        gateBlinkChance: 10,
         refresh: {
           blankSeconds: 0.5,
           columnRevealSeconds: 0.25,
