@@ -184,12 +184,6 @@
         text = placeholderFor(column, state);
       }
       shouldBlink = segment.timeBlink && landing == null;
-    } else if (column.key === "gate") {
-      var gates = staging.gates || [];
-      text = segment.gateIndex >= 0 && segment.gateIndex < gates.length
-        ? String(gates[segment.gateIndex])
-        : placeholderFor(column, state);
-      shouldBlink = segment.gateBlink;
     }
 
     if (shouldBlink) {
