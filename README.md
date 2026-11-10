@@ -26,7 +26,7 @@ fullscreen.
 
 | URL                              | What it is                                                                                                                                                          |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html?state=arrival-chaos` | The airport during the diversion. Seeded chaos: rows refresh slowly, ETAs drift a few minutes around fictional landing times and sometimes change to `DUE`, `DELAYED`, `EXPECTED` or a blank cell, with `DELAYED` always flashing.                                   |
+| `index.html?state=arrival-chaos` | The airport during the diversion. Seeded chaos: rows refresh slowly, ETAs drift a few minutes around fictional landing times and sometimes change to `DUE`, `DELAYED`, `EXPECTED` or a blank cell, with `DELAYED` always flashing. Occasional bulk refreshes cascade down the page.                                   |
 | `index.html?state=departures`    | The aftermath. The same 38 aircraft, every one of them `DEPARTED`. Calm scrolling messages, no chaos staging.                                                        |
 
 Both states paginate the same 38 flights: 16 rows per page, three pages,
@@ -142,10 +142,10 @@ landing sequence is not displayed as sorted arrival order.
 Each flight refreshes independently on a seeded cycle (10–60 seconds). It
 blanks and reveals its columns from left to right, then shows one of these:
 
-- 60%: the simulated ETA, independently varied by ±5 minutes
-- 15%: `DUE`
-- 15%: `DELAYED` (always flashing)
-- 10%: an **empty TIME cell** (no placeholder)
+- 20%: the simulated ETA, independently varied by ±5 minutes
+- 30%: `DUE`
+- 30%: `DELAYED` (always flashing)
+- 20%: `--:--` (unknown time)
 
 This is **not** a running historical clock. All 38 rows remain on the board;
 the visible information changes as though updates are arriving in the airport.
@@ -160,18 +160,33 @@ Configure the pool, ETA jitter, refresh cadence and blink in
 staging: {
   seed: "gander-2001",
   statuses: [
-    { weight: 60, eta: true },
-    { weight: 15, value: "DUE" },
-    { weight: 15, value: "DELAYED", blink: true },
-    { weight: 10, value: "" },
+    { weight: 20, eta: true },
+    { weight: 30, value: "DUE" },
+    { weight: 30, value: "DELAYED", blink: true },
+    { weight: 20, value: "--:--" },
   ],
   etaJitterMinutes: 5,
   rowSwapPercent: 3, // chance per visible row's refresh; off-screen swap only
+  burst: {
+    checkSeconds: 45,
+    chancePercent: 35,
+    minFraction: 0.5,
+    maxFraction: 0.75,
+    rowStepSeconds: 0.65,
+  },
   holdSeconds: { min: 10, max: 60 },
   refresh: { blankSeconds: 0.5, columnRevealSeconds: 0.25 },
   blink: { periodTicks: 12, onTicks: 7 },
 },
 ```
+
+Every 45 seconds the arrivals board has a 35% chance of triggering a
+**bulk refresh**. It picks between half and three-quarters of the flights on
+the currently visible page, then refreshes those rows in top-to-bottom order,
+staggered by 0.65 seconds. Each chosen row re-rolls its time/status and
+plays its normal blank-and-reveal cascade. If the page changes while a burst
+is in progress, the remaining burst is cancelled; the departures board never
+performs bursts.
 
 Same seed → same refreshes and ETA changes. Pass `?seed=other` to
 reshuffle. A genuine `landingTime` in `data/flights.js` always takes
