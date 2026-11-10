@@ -120,6 +120,11 @@ window.FIDS_DATA.displayStates = {
         ],
         etaJitterMinutes: 5,
         holdSeconds: { min: 20, max: 120 },
+        // Gander's small passenger terminal appears to have had one gate.
+        // 2001 numbering is unverified: deliberately restrict staging to "1".
+        // Almost every refresh keeps the gate unknown.
+        gates: ["1"],
+        gateAssignmentPercent: 5,
         gateBlinkChance: 10,
         refresh: {
           blankSeconds: 0.5,
