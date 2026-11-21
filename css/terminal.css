@@ -134,6 +134,53 @@ body {
   opacity: 0.92;
 }
 
+.flight-area {
+  position: relative;
+}
+
+.flight-area:has(.passenger-notice:not([hidden])) > .line {
+  visibility: hidden;
+}
+
+.passenger-notice:not([hidden]) {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.55em;
+  padding-inline: 4%;
+  font-size: 1.25em;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .passenger-notice:not([hidden]) > .title {
+    animation: passenger-notice-flash 1.6s step-end infinite;
+  }
+
+  body[data-paused="true"] .passenger-notice > .title {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes passenger-notice-flash {
+  0% {
+    opacity: 1;
+  }
+
+  62.5% {
+    opacity: 0;
+  }
+}
+
+.passenger-notice > :last-child {
+  max-width: 46ch;
+  text-wrap: balance;
+}
+
 /* ---------- CRT overlays ---------- */
 
 .overlay {

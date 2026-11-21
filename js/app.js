@@ -58,6 +58,11 @@
     var state = null;
     var tick = 0;
     var ticksOnPage = 0;
+    var notices = [];
+    var noticeInterval = 0;
+    var noticeIndex = 0;
+    var nextNoticeTick = 0;
+    var noticeEndTick = 0;
     var paused = false;
     var timer = null;
 
@@ -78,10 +83,14 @@
       return FIDS.States.deepMerge(resolved, patch);
     }
 
+    function ticksForSeconds(seconds) {
+      return Math.max(1, Math.round((seconds * 1000) / (state.tickMs || 250)));
+    }
+
     function rotateTicks() {
       var seconds = (state.pagination && state.pagination.rotateSeconds) || 0;
       if (!seconds) return 0;
-      return Math.max(1, Math.round((seconds * 1000) / (state.tickMs || 250)));
+      return ticksForSeconds(seconds);
     }
 
     var charRatio = null;
@@ -103,7 +112,7 @@
       var lineHeight =
         parseFloat(getComputedStyle(body).getPropertyValue("--line-height")) ||
         1.35;
-      var lines = boardEl.childElementCount || 1;
+      var lines = board.lineCount;
       var byWidth = screen.clientWidth / (board.width * charRatio);
       var byHeight = screen.clientHeight / (lines * lineHeight);
       var size = Math.max(
@@ -173,6 +182,17 @@
       board = FIDS.Board.create(boardEl, state, flights);
       tick = 0;
       ticksOnPage = 0;
+      notices = (state.notices || []).filter(function (notice) {
+        return notice && typeof notice.text === "string" && notice.text.trim() &&
+          Number.isFinite(notice.durationSeconds) && notice.durationSeconds > 0;
+      });
+      var interval = state.notices_interrupt_interval;
+      noticeInterval = notices.length && Number.isFinite(interval) && interval > 0
+        ? ticksForSeconds(interval)
+        : 0;
+      noticeIndex = 0;
+      nextNoticeTick = noticeInterval;
+      noticeEndTick = 0;
       if (initialPage) board.setPage(initialPage - 1, 0);
       fit();
       renderDevbar();
@@ -183,8 +203,25 @@
     function step() {
       if (paused) return;
       tick += 1;
-      ticksOnPage += 1;
       board.update(tick);
+
+      if (noticeEndTick) {
+        if (tick === noticeEndTick) {
+          board.hideNotice();
+          noticeEndTick = 0;
+          nextNoticeTick = tick + noticeInterval;
+        }
+        return;
+      }
+      ticksOnPage += 1;
+      if (noticeInterval && tick === nextNoticeTick) {
+        var notice = notices[noticeIndex];
+        board.showNotice(notice.text);
+        noticeEndTick = tick + ticksForSeconds(notice.durationSeconds);
+        noticeIndex = (noticeIndex + 1) % notices.length;
+        return;
+      }
+
       if (pageLocked) return;
       var limit = rotateTicks();
       if (limit && board.pageCount > 1 && ticksOnPage >= limit) {
@@ -231,6 +268,7 @@
         case " ":
           event.preventDefault();
           paused = !paused;
+          body.dataset.paused = paused ? "true" : "false";
           renderDevbar();
           break;
         case "ArrowRight":

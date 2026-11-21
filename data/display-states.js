@@ -65,6 +65,13 @@ window.FIDS_DATA.displayStates = {
     "arrival-chaos": {
       order: { mode: "shuffle", seed: "gander-arrival-rows" },
       label: "Arrivals",
+      notices_interrupt_interval: 30,
+      notices: [
+        {
+          text: "THIS PERFORMANCE RUNS FOR APPROXIMATELY 100 MINUTES WITH NO INTERVAL",
+          durationSeconds: 10,
+        },
+      ],
       header: {
         left: "ARRIVALS",
         right: "TUE 11 SEP 2001",
@@ -73,21 +80,21 @@ window.FIDS_DATA.displayStates = {
         {
           key: "flight",
           label: "FLIGHT",
-          width: 12,
+          width: 15,
           field: "flightNumber",
           placeholder: "----",
         },
         {
           key: "airline",
           label: "AIRLINE",
-          width: 28,
+          width: 30,
           field: "airline",
         },
-        { key: "from", label: "FROM", width: 22, field: "origin" },
+        { key: "from", label: "FROM", width: 30, field: "origin" },
         {
           key: "time",
           label: "TIME",
-          width: 10,
+          width: 14,
           field: "landingTime",
           placeholder: "--:--",
         },
@@ -143,26 +150,29 @@ window.FIDS_DATA.displayStates = {
     "departures": {
       order: { mode: "shuffle", seed: "gander-departure-rows" },
       label: "Departures",
+      notices_interrupt_interval: 0,
+      notices: [],
       header: {
         left: "DEPARTURES",
+        right: "SAT 15 SEP 2001",
       },
       pagination: {
         rowsPerPage: 16,
-        rotateSeconds: 18,
+        rotateSeconds: 14,
         footerFormat: "PAGE {page} OF {pages}",
       },
       columns: [
         {
           key: "flight",
           label: "FLIGHT",
-          width: 12,
+          width: 15,
           field: "flightNumber",
           placeholder: "----",
         },
         {
           key: "airline",
           label: "AIRLINE",
-          width: 28,
+          width: 30,
           field: "airline",
         },
         {
@@ -171,7 +181,7 @@ window.FIDS_DATA.displayStates = {
           width: 30,
           field: "destination",
         },
-        { key: "status", label: "STATUS", width: 10, value: "DEPARTED" },
+        { key: "status", label: "STATUS", width: 14, value: "DEPARTED" },
       ],
       messages: {
         mode: "scroll",

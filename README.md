@@ -213,6 +213,23 @@ messages: {
 `scroll` runs everything as one continuous marquee, `rotate` shows one message
 at a time for `holdSeconds`, `static` centres the first item.
 
+### Passenger notices
+
+Set `notices_interrupt_interval` to the number of seconds the flight list
+should be visible between notices. Each entry in `notices` has its own
+`durationSeconds`:
+
+```js
+notices_interrupt_interval: 30,
+notices: [
+  { text: "THIS PERFORMANCE RUNS FOR APPROXIMATELY 100 MINUTES WITH NO INTERVAL", durationSeconds: 10 },
+],
+```
+
+The board shows one notice at a time in array order, then resumes the flight
+list. An empty array or nonpositive interval disables notices. Space pauses
+notice timing along with the rest of the board.
+
 ### CRT treatment
 
 `css/terminal.css` drives the whole look from custom properties at the top:

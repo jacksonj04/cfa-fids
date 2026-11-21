@@ -264,13 +264,17 @@
     );
     container.appendChild(line("spacer")).textContent = "";
 
+    var flightArea = document.createElement("div");
+    flightArea.className = "flight-area";
+    container.appendChild(flightArea);
+
     var header = state.header || {};
     var headerLeft = transform(header.left || "", state.transform);
     var headerRight = transform(header.right || "", state.transform);
-    container.appendChild(line("header")).textContent =
+    flightArea.appendChild(line("header")).textContent =
       pad(headerLeft, width - headerRight.length) + headerRight;
 
-    container.appendChild(line("rule")).textContent = repeat("-", width);
+    flightArea.appendChild(line("rule")).textContent = repeat("-", width);
 
     var labels = line("labels");
     labels.textContent = columns
@@ -282,9 +286,9 @@
         );
       })
       .join("");
-    container.appendChild(labels);
+    flightArea.appendChild(labels);
 
-    container.appendChild(line("rule")).textContent = repeat("-", width);
+    flightArea.appendChild(line("rule")).textContent = repeat("-", width);
 
     for (var i = 0; i < rowsPerPage; i++) {
       var rowLine = line("row");
@@ -295,14 +299,23 @@
         rowLine.appendChild(span);
         return { el: span, width: column.width, align: column.align };
       });
-      container.appendChild(rowLine);
+      flightArea.appendChild(rowLine);
       slots.push({ line: rowLine, cells: cells });
     }
 
-    container.appendChild(line("rule")).textContent = repeat("-", width);
+    flightArea.appendChild(line("rule")).textContent = repeat("-", width);
 
     var footer = line("footer");
-    container.appendChild(footer);
+    flightArea.appendChild(footer);
+
+    var notice = document.createElement("div");
+    notice.className = "passenger-notice";
+    notice.hidden = true;
+    notice.appendChild(line("title")).textContent = "*** PASSENGER NOTICE ***";
+    var noticeText = document.createElement("div");
+    notice.appendChild(noticeText);
+    flightArea.appendChild(notice);
+
     container.appendChild(line("spacer")).textContent = "";
 
     var message = line("message");
@@ -509,7 +522,7 @@
 
     return {
       width: width,
-      lineCount: container.childElementCount,
+      lineCount: container.childElementCount + flightArea.childElementCount - 2,
       pageCount: pages.length,
       flightCount: rows.length,
       get pageIndex() {
@@ -529,6 +542,13 @@
       },
       previousPage: function (tick) {
         return this.setPage(pageIndex - 1, tick);
+      },
+      showNotice: function (text) {
+        noticeText.textContent = transform(text, state.transform);
+        notice.hidden = false;
+      },
+      hideNotice: function () {
+        notice.hidden = true;
       },
       update: update,
       messageState: messageState,
